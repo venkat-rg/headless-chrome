@@ -32,7 +32,7 @@ function makePrintOptions (options = {}) {
   )
 }
 
-export async function printUrlToPdf (url, printOptions = {}) {
+export async function printUrlToPdf (url, printOptions = {}, eventHeaders = {}) {
   const LOAD_TIMEOUT = (config && config.chrome.pageLoadTimeout) || 1000 * 60
   let result
   let loaded = false
@@ -48,6 +48,11 @@ export async function printUrlToPdf (url, printOptions = {}) {
   const client = await Cdp({ host: '127.0.0.1', target: tab })
 
   const { Network, Page } = client
+
+  // Sets Event Headers
+  const customHeaders = {'headers': {Authorization: eventHeaders['Authorization']}}
+  
+  Network.setExtraHTTPHeaders(customHeaders)
 
   Network.requestWillBeSent((params) => {
     log('Chrome is sending request for:', params.request.url)
@@ -72,8 +77,9 @@ export async function printUrlToPdf (url, printOptions = {}) {
     await Page.navigate({ url }) // https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-navigate
     await loading()
 
-    // https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-printToPDF
-    const pdf = await Page.printToPDF(printOptions)
+    await sleep(1000 * 2)
+
+    const pdf = await Page.printToPDF(printOptions) // https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-printToPDF
     result = pdf.data
   } catch (error) {
     console.error(error)
@@ -131,7 +137,7 @@ export async function uploadToS3 (pdf) {
   await loading();
 
   if (isSuccess) {
-    https://s3-us-west-2.amazonaws.com/tribelocal-prod-pdf/6n8w8nqb2pchdtdeoedfmxcwp0_1494491925447.pdf
+    // https://s3-us-west-2.amazonaws.com/tribelocal-prod-pdf/6n8w8nqb2pchdtdeoedfmxcwp0_1494491925447.pdf
     return `https://s3-${process.env.S3_REGION}.amazonaws.com/${process.env.S3_BUCKET}/${pdfName}`;
   }
 
@@ -151,7 +157,7 @@ export default (async function printToPdfHandler (event) {
   let pdfURL = null;
 
   try {
-    pdf = await printUrlToPdf(url, printOptions)
+    pdf = await printUrlToPdf(url, printOptions, event.headers)
 
     // Uploading contents to s3
     pdfURL = await uploadToS3(pdf)
